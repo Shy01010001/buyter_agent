@@ -35,9 +35,9 @@ def save_variable(data, name):
 class decision(nn.Module):
     def __init__(self, win_size, dropout = 0.5):
         super(decision, self).__init__()
-        self.coach = nn.Sequential(nn.Linear(win_size * 3, 2048), nn.Dropout(0.5), nn.ReLU(),nn.Linear(2048, 1), nn.Sigmoid())
-        self.model_pos = nn.Sequential(nn.Linear(win_size * 3, 2048), nn.Dropout(0.5), nn.ReLU(),nn.Linear(2048, 3), nn.Softmax(dim = -1))
-        self.model_neg = nn.Sequential(nn.Linear(win_size * 3, 2048), nn.Dropout(0.5), nn.ReLU(),nn.Linear(2048, 3), nn.Softmax(dim = -1))
+        self.coach = nn.Sequential(nn.Linear(win_size, 2048), nn.Dropout(0.5), nn.ReLU(),nn.Linear(2048, 1), nn.Sigmoid())
+        self.model_pos = nn.Sequential(nn.Linear(win_size, 2048), nn.Dropout(0.5), nn.ReLU(),nn.Linear(2048, 3), nn.Softmax(dim = -1))
+        self.model_neg = nn.Sequential(nn.Linear(win_size, 2048), nn.Dropout(0.5), nn.ReLU(),nn.Linear(2048, 3), nn.Softmax(dim = -1))
         self.initialize()
         
     def sample(self, prob):
@@ -86,6 +86,7 @@ class decision(nn.Module):
 class buyer():
     def __init__(self, file, win_size, experiment_group):
         try:
+            os.mkdir('lr_record')
             os.mkdir('q_value_record')
             os.mkdir('reward_record')
             os.mkdir('test')
@@ -209,8 +210,7 @@ class buyer():
             self.agent.train()
         else:
             self.agent.eval()
-        today_state = np.append(np.append(self.z_zero_nomalization(raw_data[begin : begin + self.win_size]), self.z_zero_nomalization(raw_volume[begin : begin + self.win_size])),\
-                                self.z_zero_nomalization(self.mood))
+        today_state = self.z_zero_nomalization(raw_data[begin : begin + self.win_size])
         today_state = torch.tensor(today_state, dtype = torch.float)
         
         
@@ -225,8 +225,7 @@ class buyer():
                 print(step)
                 exit()
             reward = self.reward_cal(cur_decision, today_price)
-            next_day_state = np.append(np.append(self.z_zero_nomalization(raw_data[begin + step * interval : begin + step * interval + self.win_size]), self.z_zero_nomalization(raw_volume[begin + step * interval : begin + step * interval + self.win_size])),\
-                                       self.z_zero_nomalization(self.mood))
+            next_day_state = self.z_zero_nomalization(raw_data[begin + step * interval : begin + step * interval + self.win_size])
             next_day_state = torch.tensor(next_day_state, dtype = torch.float)
             
             if mode == 'train':
@@ -241,12 +240,13 @@ class buyer():
     def __call__(self):
          # self.buffer 中四个元素的类型分别是：tensor, tensor, tensor, int
          loss_array = []
+         lr_list = []
          loss_var_list = []
          # mood_record_list = []
          test_reward_record = []
          self.agent.train()
          self.target_agent.eval()
-         for epoch in tqdm(range(5000)):
+         for epoch in tqdm(range(1200)):
              
              self.buffer = []
              self.buffer_test = []
@@ -276,7 +276,7 @@ class buyer():
              # torch.nn.utils.clip_grad_norm_(self.agent.parameters(), max_norm=1.0)
              self.optimizer.step()
              self.lr_scheduler.step()
-             print(self.lr_scheduler.get_last_lr())
+             lr_list.append(self.lr_scheduler.get_last_lr())
              loss_array.append(loss.item())
              # current_lr = self.optimizer.param_groups[0]['lr']
              # print()
@@ -293,12 +293,13 @@ class buyer():
              # print()
              if (epoch + 1) % 20 == 0:
                  self.target_agent.load_state_dict(self.agent.state_dict())
-             if (epoch) % 50 == 0:
+             if (epoch) % 1199 == 0:
                   
                   # print()
                   # print(np.array(mood_record_list).shape)
                   # self.draw_plot_fig(mood_record_list)
                   self.draw_fig(loss_array, f'./loss_record/loss_record_{self.save_file_name}')
+                  self.draw_fig(loss_array, f'./lr_record/lr_record_{self.save_file_name}')
                   
              if epoch % 100 == 0:
                   # self.mood = [0] * 30
@@ -328,5 +329,5 @@ class buyer():
                  
                  
 
-agent = buyer('./ziguang.pkl', 30, 'price_and_volume_128_a3c_w_mood_aug_neg_guided_w_norm_1024')
+agent = buyer('./ziguang.pkl', 30, 'price_and_volume_128_a3c_price_only_aug_neg_guided_w_norm_2048')
 agent()
